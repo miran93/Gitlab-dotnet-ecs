@@ -1,36 +1,40 @@
 stages:
   - build
+  - test
+  - package
   - deploy
 
 variables:
-  DOTNET_VERSION: "5.0"
-  ARTIFACT_NAME: "sample_app.zip"
-  SERVICE_NAME: "my_app.service"
+  APPLICATION_NAME: "my-dotnet"
 
 build:
   stage: build
-  image: mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION}
+  image: mcr.microsoft.com/dotnet/sdk:5.0
   script:
     - dotnet restore
     - dotnet build --configuration Release
-    - dotnet publish --configuration Release --output ./publish
 
-  artifacts:
-   paths:
-    - ./publish
+test:
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:5.0
+  script:
+    - dotnet test
+
+package:
+  stage: package
+  image: mcr.microsoft.com/dotnet/sdk:5.0
+  before_script:
+    - apt-get update && apt-get install -y zip
+  script:
+    - dotnet publish --configuration Release --output ./publish
+    - cd publish
+    - zip -r ../app.zip .
 
 deploy:
   stage: deploy
-  image: python:3
+  image: amazon/aws-cli:2.x
   before_script:
-    - apt-get update
-    - apt-get install -y openssh-client
+    - apt-get update && apt-get install -y unzip
   script:
-    - mkdir -p ~/.ssh
-    - touch ~/.ssh/known_hosts
-    - ssh-keyscan -H $EC2_INSTANCE_IP >> ~/.ssh/known_hosts
-    - echo "$AWS_SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-    - chmod 600 ~/.ssh/id_rsa
-    - scp -i ~/.ssh/id_rsa -r ./publish/* $EC2_INSTANCE_USER@$EC2_INSTANCE_IP:$EC2_INSTANCE_PATH
-    - ssh -i ~/.ssh/id_rsa $EC2_INSTANCE_USER@$EC2_INSTANCE_IP "sudo rm -rf $EC2_INSTANCE_PATH/*"
-    - ssh -i ~/.ssh/id_rsa $EC2_INSTANCE_USER@$EC2_INSTANCE_IP "ls -l $EC2_INSTANCE_PATH"
+    - aws s3 cp app.zip s3://$S3_BUCKET/$APPLICATION_NAME/app.zip
+    - aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE --force-new-deployment
