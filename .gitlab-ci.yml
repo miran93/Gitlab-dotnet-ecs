@@ -32,9 +32,16 @@ package:
 
 deploy:
   stage: deploy
-  image: amazon/aws-cli:2.x
+  image: mcr.microsoft.com/dotnet/sdk:5.0
   before_script:
     - apt-get update && apt-get install -y unzip
+    - apt-get install -y python3-pip
+    - pip3 install --upgrade pip
+    - pip3 install awscli
   script:
+    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+    - aws configure set default.region $AWS_DEFAULT_REGION
     - aws s3 cp app.zip s3://$S3_BUCKET/$APPLICATION_NAME/app.zip
     - aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE --force-new-deployment
+
